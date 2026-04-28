@@ -4,9 +4,17 @@ const router = express.Router();
 const {
   register,
   login,
+  refreshToken,
+  logout,
+  me,
 } = require("../controllers/authController");
+
+const { auth } = require("../middleware/auth");
 
 router.post("/register", register);
 router.post("/login", login);
+router.post("/refresh", refreshToken);
+router.post("/logout", logout);
+router.get("/me", auth, me);
 
 module.exports = router;
