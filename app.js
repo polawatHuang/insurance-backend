@@ -1,5 +1,12 @@
 require("dotenv").config();
 
+const allowedOrigins = [
+  "https://*.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3306",
+];
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -19,10 +26,29 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
+    origin: function (origin, callback) {
+      // allow request ที่ไม่มี origin (เช่น postman)
+      if (!origin) return callback(null, true);
+
+      // allow localhost
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // ✅ allow ทุก *.vercel.app
+      if (origin.endsWith(".vercel.app")) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS: " + origin));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   })
 );
+
+app.options("*", cors()); // enable pre-flight for all routes
 
 app.use(express.json({ limit: "1000mb" }));
 app.use(cookieParser());
