@@ -11,7 +11,9 @@ const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const leadRoutes = require("./routes/leadRoutes");
 const productRoutes = require("./routes/productRoutes");
+
 const blogRoutes = require("./routes/blogRoutes");
+const promoRoutes = require("./routes/promoRoutes");
 
 const app = express();
 
@@ -71,11 +73,13 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/blogs", blogRoutes);
+app.use("/api/promo", promoRoutes);
 
 app.use((err, req, res, next) => {
   if (err.message?.startsWith("Not allowed by CORS")) {
