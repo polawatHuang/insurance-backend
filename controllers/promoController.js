@@ -1,3 +1,5 @@
+const db = require('../config/db');
+
 const Promo = {
   async getAll() {
     const [rows] = await db.query('SELECT * FROM promo ORDER BY id DESC');
