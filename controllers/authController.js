@@ -199,20 +199,30 @@ exports.forgotPassword = async (req, res) => {
       [resetToken, resetTokenExpires, user.id]
     );
 
+    if (!process.env.MAIL_HOST || !process.env.MAIL_USER || !process.env.MAIL_PASS) {
+      console.error("[forgotPassword] Mail environment variables are not configured");
+      return res.status(500).json({ message: "Email service is not configured" });
+    }
+
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
 
-    const transporter = createMailTransporter();
-    await transporter.sendMail({
-      from: `"${process.env.MAIL_FROM_NAME || "Support"}" <${process.env.MAIL_USER}>`,
-      to: user.email,
-      subject: "Password Reset Request",
-      html: `
-        <p>You requested a password reset. Click the link below to reset your password:</p>
-        <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>This link expires in 1 hour.</p>
-        <p>If you did not request this, please ignore this email.</p>
-      `,
-    });
+    try {
+      const transporter = createMailTransporter();
+      await transporter.sendMail({
+        from: `"${process.env.MAIL_FROM_NAME || "Support"}" <${process.env.MAIL_USER}>`,
+        to: user.email,
+        subject: "Password Reset Request",
+        html: `
+          <p>You requested a password reset. Click the link below to reset your password:</p>
+          <p><a href="${resetUrl}">${resetUrl}</a></p>
+          <p>This link expires in 1 hour.</p>
+          <p>If you did not request this, please ignore this email.</p>
+        `,
+      });
+    } catch (mailError) {
+      console.error("[forgotPassword] Failed to send email:", mailError.message);
+      return res.status(500).json({ message: "Failed to send reset email. Please try again later." });
+    }
 
     res.status(200).json({ message: "If that email is registered, a reset link has been sent" });
   } catch (error) {
