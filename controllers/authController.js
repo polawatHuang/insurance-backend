@@ -1,6 +1,20 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 const db = require("../config/db");
+
+function createMailTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT) || 587,
+    secure: process.env.MAIL_SECURE === "true",
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+}
 
 function generateAccessToken(user) {
   return jwt.sign(
@@ -156,6 +170,81 @@ exports.me = async (req, res) => {
     }
 
     res.json(users[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const [users] = await db.query("SELECT id, email FROM users WHERE email = ?", [email]);
+
+    // Always return 200 to prevent email enumeration
+    if (users.length === 0) {
+      return res.status(200).json({ message: "If that email is registered, a reset link has been sent" });
+    }
+
+    const user = users[0];
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await db.query(
+      "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
+      [resetToken, resetTokenExpires, user.id]
+    );
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+    const transporter = createMailTransporter();
+    await transporter.sendMail({
+      from: `"${process.env.MAIL_FROM_NAME || "Support"}" <${process.env.MAIL_USER}>`,
+      to: user.email,
+      subject: "Password Reset Request",
+      html: `
+        <p>You requested a password reset. Click the link below to reset your password:</p>
+        <p><a href="${resetUrl}">${resetUrl}</a></p>
+        <p>This link expires in 1 hour.</p>
+        <p>If you did not request this, please ignore this email.</p>
+      `,
+    });
+
+    res.status(200).json({ message: "If that email is registered, a reset link has been sent" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ message: "Token and new password are required" });
+    }
+
+    const [users] = await db.query(
+      "SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > NOW()",
+      [token]
+    );
+
+    if (users.length === 0) {
+      return res.status(400).json({ message: "Invalid or expired reset token" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await db.query(
+      "UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?",
+      [hashedPassword, users[0].id]
+    );
+
+    res.status(200).json({ message: "Password has been reset successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
