@@ -58,3 +58,27 @@ exports.uploadDeceasedDocs = multer({
   fileFilter,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per file
 }).any();
+
+// ── Admin result documents (uploaded back to user) ───────────────────────
+const resultDocsUploadDir = path.join(__dirname, "../uploads/result-docs");
+
+if (!fs.existsSync(resultDocsUploadDir)) {
+  fs.mkdirSync(resultDocsUploadDir, { recursive: true });
+}
+
+const resultDocsStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, resultDocsUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName =
+      Date.now() + "-" + Math.round(Math.random() * 1e9) + path.extname(file.originalname);
+    cb(null, uniqueName);
+  },
+});
+
+exports.uploadResultDocs = multer({
+  storage: resultDocsStorage,
+  fileFilter,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB per file
+}).array("files", 20);

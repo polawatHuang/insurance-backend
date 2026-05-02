@@ -1,3 +1,5 @@
+const path = require("path");
+const fs = require("fs");
 const db = require("../config/db");
 
 // POST /api/deceased-policy-requests — any authenticated user
@@ -69,6 +71,10 @@ exports.getMyRequests = async (req, res) => {
     "SELECT * FROM deceased_policy_request_documents WHERE request_id IN (?)",
     [requestIds]
   );
+  const [resultDocs] = await db.query(
+    "SELECT * FROM deceased_policy_result_documents WHERE request_id IN (?)",
+    [requestIds]
+  );
 
   const baseUrl = `${req.protocol}://${req.get("host")}`;
 
@@ -83,6 +89,14 @@ exports.getMyRequests = async (req, res) => {
       .map((doc) => ({
         id: doc.id,
         name: doc.label,
+        label: doc.label,
+        path: doc.path,
+        url: `${baseUrl}${doc.path}`,
+      })),
+    result_documents: resultDocs
+      .filter((d) => d.request_id === row.id)
+      .map((doc) => ({
+        id: doc.id,
         label: doc.label,
         path: doc.path,
         url: `${baseUrl}${doc.path}`,
@@ -113,6 +127,10 @@ exports.getRequest = async (req, res) => {
     "SELECT * FROM deceased_policy_request_documents WHERE request_id = ?",
     [id]
   );
+  const [resultDocs] = await db.query(
+    "SELECT * FROM deceased_policy_result_documents WHERE request_id = ? ORDER BY id ASC",
+    [id]
+  );
 
   const baseUrl = `${req.protocol}://${req.get("host")}`;
 
@@ -131,6 +149,12 @@ exports.getRequest = async (req, res) => {
       documents: docs.map((doc) => ({
         id: doc.id,
         name: doc.label,
+        label: doc.label,
+        path: doc.path,
+        url: `${baseUrl}${doc.path}`,
+      })),
+      result_documents: resultDocs.map((doc) => ({
+        id: doc.id,
         label: doc.label,
         path: doc.path,
         url: `${baseUrl}${doc.path}`,
@@ -159,6 +183,60 @@ exports.updateRequest = async (req, res) => {
   );
 
   res.json({ message: "อัปเดตสำเร็จ" });
+};
+
+// POST /api/deceased-policy-requests/:id/result-documents — admin only
+exports.uploadResultDocuments = async (req, res) => {
+  const { id } = req.params;
+
+  const [existing] = await db.query(
+    "SELECT id FROM deceased_policy_requests WHERE id = ?",
+    [id]
+  );
+
+  if (existing.length === 0) {
+    return res.status(404).json({ message: "Request not found" });
+  }
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ message: "กรุณาเลือกไฟล์อย่างน้อย 1 ไฟล์" });
+  }
+
+  const docValues = req.files.map((file) => [
+    id,
+    file.originalname,
+    `/uploads/result-docs/${file.filename}`,
+  ]);
+
+  await db.query(
+    "INSERT INTO deceased_policy_result_documents (request_id, label, path) VALUES ?",
+    [docValues]
+  );
+
+  res.status(201).json({ message: "อัปโหลดเรียบร้อย", count: req.files.length });
+};
+
+// DELETE /api/deceased-policy-requests/:id/result-documents/:docId — admin only
+exports.deleteResultDocument = async (req, res) => {
+  const { id, docId } = req.params;
+
+  const [existing] = await db.query(
+    "SELECT * FROM deceased_policy_result_documents WHERE id = ? AND request_id = ?",
+    [docId, id]
+  );
+
+  if (existing.length === 0) {
+    return res.status(404).json({ message: "Document not found" });
+  }
+
+  const fullPath = path.join(__dirname, "../", existing[0].path);
+  if (fs.existsSync(fullPath)) {
+    fs.unlinkSync(fullPath);
+  }
+
+  await db.query("DELETE FROM deceased_policy_result_documents WHERE id = ?", [docId]);
+
+  res.json({ message: "ลบเรียบร้อย" });
 };
 
 // DELETE /api/deceased-policy-requests/:id — admin only
