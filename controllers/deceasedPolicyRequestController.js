@@ -2,6 +2,17 @@ const path = require("path");
 const fs = require("fs");
 const db = require("../config/db");
 
+// Fix labels that were mis-stored as latin1-decoded UTF-8 bytes (old multer encoding bug)
+function fixLabel(str) {
+  if (!str) return str;
+  try {
+    const fixed = Buffer.from(str, "latin1").toString("utf8");
+    // If re-encoding yields Thai characters, the original was garbled
+    if (/[\u0E00-\u0E7F]/.test(fixed)) return fixed;
+  } catch {}
+  return str;
+}
+
 // POST /api/deceased-policy-requests — any authenticated user
 exports.createRequest = async (req, res) => {
   const userId = req.user?.id || null;
@@ -13,11 +24,14 @@ exports.createRequest = async (req, res) => {
   const requestId = result.insertId;
 
   if (req.files && req.files.length > 0) {
-    const docValues = req.files.map((file) => [
-      requestId,
-      file.fieldname,
-      `/uploads/deceased-docs/${file.filename}`,
-    ]);
+    let labels = [];
+    try { labels = JSON.parse(req.body.labels || "[]"); } catch { labels = []; }
+
+    const docValues = req.files.map((file) => {
+      const idx = parseInt(file.fieldname.replace("file_", ""), 10);
+      const label = labels[idx] || file.originalname;
+      return [requestId, label, `/uploads/deceased-docs/${file.filename}`];
+    });
     await db.query(
       "INSERT INTO deceased_policy_request_documents (request_id, label, path) VALUES ?",
       [docValues]
@@ -88,8 +102,8 @@ exports.getMyRequests = async (req, res) => {
       .filter((d) => d.request_id === row.id)
       .map((doc) => ({
         id: doc.id,
-        name: doc.label,
-        label: doc.label,
+        name: fixLabel(doc.label),
+        label: fixLabel(doc.label),
         path: doc.path,
         url: `${baseUrl}${doc.path}`,
       })),
@@ -148,8 +162,8 @@ exports.getRequest = async (req, res) => {
       },
       documents: docs.map((doc) => ({
         id: doc.id,
-        name: doc.label,
-        label: doc.label,
+        name: fixLabel(doc.label),
+        label: fixLabel(doc.label),
         path: doc.path,
         url: `${baseUrl}${doc.path}`,
       })),
