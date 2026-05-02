@@ -14,6 +14,7 @@ const productRoutes = require("./routes/productRoutes");
 
 const blogRoutes = require("./routes/blogRoutes");
 const promoRoutes = require("./routes/promoRoutes");
+const deceasedPolicyRequestRoutes = require("./routes/deceasedPolicyRequestRoutes");
 
 const app = express();
 
@@ -79,7 +80,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/blogs", blogRoutes);
-app.use("/api/promo", promoRoutes);
+app.use("/api/promos", promoRoutes);
+app.use("/api/deceased-policy-requests", deceasedPolicyRequestRoutes);
 
 app.use((err, req, res, next) => {
   if (err.message?.startsWith("Not allowed by CORS")) {
